@@ -15,47 +15,79 @@ export async function POST(req: Request) {
       return new NextResponse("Invalid goal", { status: 400 });
     }
 
-    // 1. Generate the pathway using AI
-    const generatedData = await generateLearningPathway(goal);
+    // Fetch user preferences for custom API key / model
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { aiApiKey: true, aiModel: true } as any,
+    }) as any;
 
-    // 2. Save to Database
-    const pathway = await prisma.pathway.create({
-      data: {
+    // 1. Generate the pathway using AI
+    const generatedData = await generateLearningPathway(goal, user?.aiApiKey, user?.aiModel);
+
+    // 2. Save to Database using raw commands to bypass Replica Set requirements
+    const generateObjectId = () => {
+      const timestamp = Math.floor(Date.now() / 1000).toString(16);
+      const random = Array.from({length: 16}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      return timestamp + random;
+    };
+
+    const pathwayId = generateObjectId();
+    const date = new Date().toISOString();
+
+    await prisma.$runCommandRaw({
+      insert: "Pathway",
+      documents: [{
+        _id: { $oid: pathwayId },
         title: generatedData.title,
         description: generatedData.description,
         goal: goal,
-        userId: session.user.id,
-        modules: {
-          create: generatedData.modules.map((mod) => ({
-            title: mod.title,
-            content: mod.content,
-            order: mod.order,
-            resources: {
-              create: mod.resources.map((res) => ({
-                title: res.title,
-                url: res.url,
-                type: res.type,
-              })),
-            },
-            quizzes: {
-              create: mod.quizzes.map((quiz) => ({
-                question: quiz.question,
-                options: JSON.stringify(quiz.options),
-                correctAnswer: quiz.correctAnswer,
-              })),
-            },
-          })),
-        },
-      },
-      include: {
-        modules: {
-          include: {
-            resources: true,
-            quizzes: true,
-          },
-        },
-      },
+        userId: { $oid: session.user.id },
+        createdAt: { $date: date },
+        updatedAt: { $date: date }
+      }]
     });
+
+    for (const mod of generatedData.modules) {
+      const moduleId = generateObjectId();
+      await prisma.$runCommandRaw({
+        insert: "Module",
+        documents: [{
+          _id: { $oid: moduleId },
+          pathwayId: { $oid: pathwayId },
+          title: mod.title,
+          content: mod.content,
+          order: mod.order
+        }]
+      });
+
+      if (mod.resources?.length > 0) {
+        await prisma.$runCommandRaw({
+          insert: "Resource",
+          documents: mod.resources.map((res: any) => ({
+            _id: { $oid: generateObjectId() },
+            moduleId: { $oid: moduleId },
+            title: res.title,
+            url: res.url,
+            type: res.type
+          }))
+        });
+      }
+
+      if (mod.quizzes?.length > 0) {
+        await prisma.$runCommandRaw({
+          insert: "Quiz",
+          documents: mod.quizzes.map((quiz: any) => ({
+            _id: { $oid: generateObjectId() },
+            moduleId: { $oid: moduleId },
+            question: quiz.question,
+            options: JSON.stringify(quiz.options),
+            correctAnswer: quiz.correctAnswer
+          }))
+        });
+      }
+    }
+
+    const pathway = { id: pathwayId };
 
     return NextResponse.json(pathway);
   } catch (error) {

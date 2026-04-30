@@ -35,13 +35,27 @@ const pathwaySchema = z.object({
 
 export type GeneratedPathway = z.infer<typeof pathwaySchema>;
 
-export async function generateLearningPathway(goal: string): Promise<GeneratedPathway> {
+export async function generateLearningPathway(
+  goal: string,
+  customApiKey?: string | null,
+  customModel?: string | null
+): Promise<GeneratedPathway> {
+  const provider = customApiKey
+    ? createOpenAI({ baseURL: "https://openrouter.ai/api/v1", apiKey: customApiKey })
+    : openrouter;
+
+  const selectedModel = customModel || process.env.AI_MODEL || "openrouter/free";
+
   const { object } = await generateObject({
-    model: openrouter(process.env.AI_MODEL || "google/gemini-2.0-pro-exp-02-05:free"),
+    model: provider(selectedModel),
     schema: pathwaySchema,
     prompt: `Act as an expert educator. Create a comprehensive learning pathway for the following goal: "${goal}". 
     The pathway should be structured into clear modules, each with educational content, relevant external resources (articles, videos, books), and a knowledge check quiz.
-    Ensure the content is high-quality, professional, and follows pedagogical best practices.`,
+    Ensure the content is high-quality, professional, and follows pedagogical best practices.
+    
+    CRITICAL INSTRUCTION: You MUST output ONLY valid JSON that matches the exact schema provided. 
+    DO NOT output any markdown, DO NOT wrap the output in \`\`\`json blocks.
+    Start your response immediately with { and end with }.`,
   });
 
   return object;

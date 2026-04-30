@@ -4,12 +4,23 @@ import { redirect, notFound } from "next/navigation";
 import { BookOpen, CheckCircle2, PlayCircle, ExternalLink, HelpCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
-export default async function PathwayDetailPage({ params }: { params: { id: string } }) {
+import { PathwayBuilder } from "@/components/pathway-builder";
+
+export default async function PathwayDetailPage({ 
+  params,
+  searchParams 
+}: { 
+  params: Promise<{ id: string }>,
+  searchParams: Promise<{ edit?: string }>
+}) {
+  const resolvedParams = await params;
+  const resolvedSearchParams = await searchParams;
+  
   const session = await auth();
   if (!session) redirect("/login");
 
   const pathway = await prisma.pathway.findUnique({
-    where: { id: params.id, userId: session.user?.id },
+    where: { id: resolvedParams.id, userId: session.user?.id },
     include: {
       modules: {
         orderBy: { order: "asc" },
@@ -23,18 +34,35 @@ export default async function PathwayDetailPage({ params }: { params: { id: stri
 
   if (!pathway) notFound();
 
+  const isOwner = pathway.userId === session.user.id;
+  const isEditing = resolvedSearchParams.edit === "true" && isOwner;
+
   return (
     <div className="max-w-5xl mx-auto px-4 py-12">
-      <Link
-        href="/dashboard"
-        className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-8 group"
-      >
-        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-        Back to Dashboard
-      </Link>
+      <div className="flex justify-between items-center mb-8">
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors group"
+        >
+          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+          Back to Dashboard
+        </Link>
+        {!isEditing && isOwner && (
+          <Link
+            href={`/pathway/${pathway.id}?edit=true`}
+            className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-white font-medium transition-colors"
+          >
+            Edit Pathway
+          </Link>
+        )}
+      </div>
 
-      <div className="mb-12">
-        <h1 className="text-4xl font-bold text-white mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+      {isEditing ? (
+        <PathwayBuilder initialPathway={pathway as any} />
+      ) : (
+        <>
+          <div className="mb-12">
+            <h1 className="text-4xl font-bold text-white mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
           {pathway.title}
         </h1>
         <p className="text-lg text-slate-400 max-w-3xl leading-relaxed">
@@ -121,7 +149,9 @@ export default async function PathwayDetailPage({ params }: { params: { id: stri
             </div>
           </div>
         ))}
-      </div>
+        </div>
+        </>
+      )}
     </div>
   );
 }
