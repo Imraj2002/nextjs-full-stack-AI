@@ -1,11 +1,10 @@
 import { getServerSession } from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
-import { prisma } from "@/lib/prisma";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import connectToDatabase from "@/lib/mongoose";
+import { User } from "@/lib/models";
 
 export const authOptions = {
-  adapter: PrismaAdapter(prisma) as any,
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -18,9 +17,9 @@ export const authOptions = {
           throw new Error("Invalid credentials");
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-        });
+        await connectToDatabase();
+
+        const user = await User.findOne({ email: credentials.email });
 
         if (!user || !user.password) {
           throw new Error("Invalid credentials");
@@ -36,7 +35,7 @@ export const authOptions = {
         }
 
         return {
-          id: user.id,
+          id: user._id.toString(),
           email: user.email,
           name: user.name,
         };

@@ -11,9 +11,7 @@ interface Pathway {
   title: string;
   description: string;
   createdAt: string;
-  _count?: {
-    modules: number;
-  };
+  modules?: any[];
 }
 
 export default function DashboardPageWrapper() {
@@ -97,7 +95,7 @@ function PathwayCard({ pathway, onDelete }: { pathway: Pathway, onDelete: () => 
         <div className="flex gap-4 mt-6">
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium bg-white/5 px-2.5 py-1 rounded-full">
             <BookOpen className="w-3 h-3" />
-            {pathway._count?.modules || 0} Modules
+            {pathway.modules ? pathway.modules.length : 0} Modules
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium bg-white/5 px-2.5 py-1 rounded-full">
             <Calendar className="w-3 h-3" />

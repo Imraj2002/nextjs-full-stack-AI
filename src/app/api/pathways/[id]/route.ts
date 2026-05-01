@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import connectToDatabase from "@/lib/mongoose";
+import { Pathway, Module } from "@/lib/models";
 
 export async function GET(
   req: Request,
@@ -11,10 +12,16 @@ export async function GET(
     const session = await auth();
     if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
 
-    const pathway = await prisma.pathway.findUnique({
-      where: { id: resolvedParams.id, userId: session.user.id },
-      include: { modules: { include: { resources: true, quizzes: true } } },
-    });
+    await connectToDatabase();
+
+    const pathway = await Pathway.findOne({ _id: resolvedParams.id, userId: session.user.id })
+      .populate({
+        path: "modules",
+        populate: [
+          { path: "resources" },
+          { path: "quizzes" }
+        ]
+      });
 
     if (!pathway) return new NextResponse("Not Found", { status: 404 });
 
@@ -33,15 +40,14 @@ export async function DELETE(
     const session = await auth();
     if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
 
-    await prisma.$runCommandRaw({
-      delete: "Pathway",
-      deletes: [
-        {
-          q: { _id: { $oid: resolvedParams.id }, userId: { $oid: session.user.id } },
-          limit: 1,
-        },
-      ],
-    });
+    await connectToDatabase();
+
+    const deleted = await Pathway.findOneAndDelete({ _id: resolvedParams.id, userId: session.user.id });
+    
+    if (!deleted) return new NextResponse("Not Found", { status: 404 });
+
+    // Optionally delete cascading modules/resources here if needed
+    await Module.deleteMany({ pathwayId: resolvedParams.id });
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {
@@ -60,17 +66,17 @@ export async function PUT(
 
     const { title, description } = await req.json();
 
-    await prisma.$runCommandRaw({
-      update: "Pathway",
-      updates: [
-        {
-          q: { _id: { $oid: resolvedParams.id }, userId: { $oid: session.user.id } },
-          u: { $set: { title, description } },
-        },
-      ],
-    });
+    await connectToDatabase();
 
-    return NextResponse.json({ id: resolvedParams.id, title, description });
+    const updated = await Pathway.findOneAndUpdate(
+      { _id: resolvedParams.id, userId: session.user.id },
+      { title, description },
+      { new: true }
+    );
+
+    if (!updated) return new NextResponse("Not Found", { status: 404 });
+
+    return NextResponse.json({ id: updated._id, title: updated.title, description: updated.description });
   } catch (error) {
     return new NextResponse("Internal Server Error", { status: 500 });
   }

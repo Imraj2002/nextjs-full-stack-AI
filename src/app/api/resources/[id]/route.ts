@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import connectToDatabase from "@/lib/mongoose";
+import { Resource } from "@/lib/models";
 
 export async function PUT(
   req: Request,
@@ -13,24 +14,27 @@ export async function PUT(
 
     const { title, url, type } = await req.json();
 
-    const resource = await prisma.resource.findUnique({
-      where: { id: resolvedParams.id },
-      include: { module: { include: { pathway: true } } },
+    await connectToDatabase();
+
+    const resource = await Resource.findById(resolvedParams.id).populate({
+      path: "moduleId",
+      populate: { path: "pathwayId" }
     });
 
-    if (!resource || resource.module.pathway.userId !== session.user.id) {
-      return new NextResponse("Not Found / Unauthorized", { status: 404 });
+    if (!resource) {
+      return new NextResponse("Not Found", { status: 404 });
     }
 
-    await prisma.$runCommandRaw({
-      update: "Resource",
-      updates: [
-        {
-          q: { _id: { $oid: resolvedParams.id } },
-          u: { $set: { title, url, type } },
-        },
-      ],
-    });
+    const pathwayUserId = resource.moduleId?.pathwayId?.userId;
+
+    if (!pathwayUserId || pathwayUserId.toString() !== session.user.id) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    resource.title = title;
+    resource.url = url;
+    resource.type = type;
+    await resource.save();
 
     return NextResponse.json({ id: resolvedParams.id, title, url, type });
   } catch (error) {
@@ -47,24 +51,24 @@ export async function DELETE(
     const session = await auth();
     if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
 
-    const resource = await prisma.resource.findUnique({
-      where: { id: resolvedParams.id },
-      include: { module: { include: { pathway: true } } },
+    await connectToDatabase();
+
+    const resource = await Resource.findById(resolvedParams.id).populate({
+      path: "moduleId",
+      populate: { path: "pathwayId" }
     });
 
-    if (!resource || resource.module.pathway.userId !== session.user.id) {
-      return new NextResponse("Not Found / Unauthorized", { status: 404 });
+    if (!resource) {
+      return new NextResponse("Not Found", { status: 404 });
     }
 
-    await prisma.$runCommandRaw({
-      delete: "Resource",
-      deletes: [
-        {
-          q: { _id: { $oid: resolvedParams.id } },
-          limit: 1,
-        },
-      ],
-    });
+    const pathwayUserId = resource.moduleId?.pathwayId?.userId;
+
+    if (!pathwayUserId || pathwayUserId.toString() !== session.user.id) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    await Resource.findByIdAndDelete(resolvedParams.id);
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {

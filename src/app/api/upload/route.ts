@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { writeFile } from "fs/promises";
-import { join } from "path";
 import { auth } from "@/lib/auth";
+import { put } from "@vercel/blob";
 import { v4 as uuidv4 } from "uuid";
 
 export async function POST(req: Request) {
@@ -11,28 +10,23 @@ export async function POST(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const data = await req.formData();
-    const file: File | null = data.get("file") as unknown as File;
+    const formData = await req.formData();
+    const file = formData.get("file") as File;
 
     if (!file) {
-      return new NextResponse("No file provided", { status: 400 });
+      return new NextResponse("No file uploaded", { status: 400 });
     }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    // Create a unique filename
-    const uniqueId = uuidv4();
-    const extension = file.name.split('.').pop();
-    const fileName = `${uniqueId}.${extension}`;
+    // We can use the file directly with Vercel Blob
+    const uniqueFilename = `${uuidv4()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
     
-    const path = join(process.cwd(), "public/uploads", fileName);
-    await writeFile(path, buffer);
+    // Upload to Vercel Blob
+    const blob = await put(uniqueFilename, file, {
+      access: 'public',
+      // We can add multipart: true for large files if needed
+    });
 
-    // Return the public URL
-    const fileUrl = `/uploads/${fileName}`;
-
-    return NextResponse.json({ url: fileUrl });
+    return NextResponse.json({ url: blob.url });
   } catch (error) {
     console.error("Error uploading file:", error);
     return new NextResponse("Internal Server Error", { status: 500 });

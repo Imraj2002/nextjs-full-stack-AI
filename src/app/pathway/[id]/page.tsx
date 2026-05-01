@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import connectToDatabase from "@/lib/mongoose";
+import { Pathway } from "@/lib/models";
 import { redirect, notFound } from "next/navigation";
 import { BookOpen, CheckCircle2, PlayCircle, ExternalLink, HelpCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -19,22 +20,23 @@ export default async function PathwayDetailPage({
   const session = await auth();
   if (!session) redirect("/login");
 
-  const pathway = await prisma.pathway.findUnique({
-    where: { id: resolvedParams.id, userId: session.user?.id },
-    include: {
-      modules: {
-        orderBy: { order: "asc" },
-        include: {
-          resources: true,
-          quizzes: true,
-        },
-      },
-    },
-  });
+  await connectToDatabase();
 
-  if (!pathway) notFound();
+  const pathwayDoc = await Pathway.findOne({ _id: resolvedParams.id, userId: session.user?.id })
+    .populate({
+      path: "modules",
+      populate: [
+        { path: "resources" },
+        { path: "quizzes" }
+      ]
+    });
 
-  const isOwner = pathway.userId === session.user.id;
+  if (!pathwayDoc) notFound();
+
+  // Convert Mongoose document to plain POJO for Next.js Client Component serialization
+  const pathway = JSON.parse(JSON.stringify(pathwayDoc));
+
+  const isOwner = pathwayDoc.userId.toString() === session.user.id;
   const isEditing = resolvedSearchParams.edit === "true" && isOwner;
 
   return (

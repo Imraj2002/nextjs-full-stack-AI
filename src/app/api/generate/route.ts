@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { generateLearningPathway } from "@/lib/ai";
-import { prisma } from "@/lib/prisma";
+import connectToDatabase from "@/lib/mongoose";
+import { User, Pathway, Module, Resource, Quiz } from "@/lib/models";
 
 export async function POST(req: Request) {
   try {
@@ -15,81 +16,52 @@ export async function POST(req: Request) {
       return new NextResponse("Invalid goal", { status: 400 });
     }
 
+    await connectToDatabase();
+
     // Fetch user preferences for custom API key / model
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { aiApiKey: true, aiModel: true } as any,
-    }) as any;
+    const user = await User.findById(session.user.id);
 
     // 1. Generate the pathway using AI
     const generatedData = await generateLearningPathway(goal, user?.aiApiKey, user?.aiModel);
 
-    // 2. Save to Database using raw commands to bypass Replica Set requirements
-    const generateObjectId = () => {
-      const timestamp = Math.floor(Date.now() / 1000).toString(16);
-      const random = Array.from({length: 16}, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      return timestamp + random;
-    };
-
-    const pathwayId = generateObjectId();
-    const date = new Date().toISOString();
-
-    await prisma.$runCommandRaw({
-      insert: "Pathway",
-      documents: [{
-        _id: { $oid: pathwayId },
-        title: generatedData.title,
-        description: generatedData.description,
-        goal: goal,
-        userId: { $oid: session.user.id },
-        createdAt: { $date: date },
-        updatedAt: { $date: date }
-      }]
+    // 2. Save to Database using Mongoose
+    const pathway = await Pathway.create({
+      title: generatedData.title,
+      description: generatedData.description,
+      goal: goal,
+      userId: session.user.id,
     });
 
     for (const mod of generatedData.modules) {
-      const moduleId = generateObjectId();
-      await prisma.$runCommandRaw({
-        insert: "Module",
-        documents: [{
-          _id: { $oid: moduleId },
-          pathwayId: { $oid: pathwayId },
-          title: mod.title,
-          content: mod.content,
-          order: mod.order
-        }]
+      const createdModule = await Module.create({
+        pathwayId: pathway._id,
+        title: mod.title,
+        content: mod.content,
+        order: mod.order
       });
 
       if (mod.resources?.length > 0) {
-        await prisma.$runCommandRaw({
-          insert: "Resource",
-          documents: mod.resources.map((res: any) => ({
-            _id: { $oid: generateObjectId() },
-            moduleId: { $oid: moduleId },
-            title: res.title,
-            url: res.url,
-            type: res.type
-          }))
-        });
+        const resourceDocs = mod.resources.map((res: any) => ({
+          moduleId: createdModule._id,
+          title: res.title,
+          url: res.url,
+          type: res.type
+        }));
+        await Resource.insertMany(resourceDocs);
       }
 
       if (mod.quizzes?.length > 0) {
-        await prisma.$runCommandRaw({
-          insert: "Quiz",
-          documents: mod.quizzes.map((quiz: any) => ({
-            _id: { $oid: generateObjectId() },
-            moduleId: { $oid: moduleId },
-            question: quiz.question,
-            options: JSON.stringify(quiz.options),
-            correctAnswer: quiz.correctAnswer
-          }))
-        });
+        const quizDocs = mod.quizzes.map((quiz: any) => ({
+          moduleId: createdModule._id,
+          question: quiz.question,
+          options: JSON.stringify(quiz.options),
+          correctAnswer: quiz.correctAnswer
+        }));
+        await Quiz.insertMany(quizDocs);
       }
     }
 
-    const pathway = { id: pathwayId };
-
-    return NextResponse.json(pathway);
+    return NextResponse.json({ id: pathway._id });
   } catch (error) {
     console.error("[GENERATION_ERROR]", error);
     return new NextResponse("Internal Server Error", { status: 500 });

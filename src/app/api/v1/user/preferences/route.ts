@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import connectToDatabase from "@/lib/mongoose";
+import { User } from "@/lib/models";
 
 export async function GET(req: Request) {
   try {
@@ -9,10 +10,9 @@ export async function GET(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { aiApiKey: true, aiModel: true } as any,
-    }) as any;
+    await connectToDatabase();
+
+    const user = await User.findById(session.user.id);
 
     if (!user) {
       return new NextResponse("User not found", { status: 404 });
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       hasApiKey: !!user.aiApiKey,
       maskedKey,
-      aiModel: user.aiModel || "",
+      aiModel: user.aiModel || "google/gemma-3-27b-it:free",
     });
   } catch (error) {
     console.error("Error fetching preferences:", error);
@@ -43,10 +43,10 @@ export async function POST(req: Request) {
 
     const { aiApiKey, aiModel } = await req.json();
 
+    await connectToDatabase();
+
     // Fetch existing user to get existing key if they send a masked key back
-    const existingUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-    }) as any;
+    const existingUser = await User.findById(session.user.id);
 
     let keyToSave = aiApiKey;
     if (keyToSave && keyToSave.startsWith("sk-or-...")) {
@@ -54,20 +54,14 @@ export async function POST(req: Request) {
       keyToSave = existingUser?.aiApiKey;
     }
 
-    // Safely update using raw command to bypass MongoDB transaction/replica set requirements
-    await prisma.$runCommandRaw({
-      update: "User",
-      updates: [
-        {
-          q: { _id: { $oid: session.user.id } },
-          u: { $set: { aiApiKey: keyToSave, aiModel: aiModel } },
-        },
-      ],
+    await User.findByIdAndUpdate(session.user.id, {
+      aiApiKey: keyToSave,
+      aiModel: aiModel,
     });
 
-    return NextResponse.json({ message: "Preferences updated successfully" });
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error updating preferences:", error);
+    console.error("Error saving preferences:", error);
     return new NextResponse("Internal Server Error", { status: 500 });
   }
 }

@@ -1,43 +1,24 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import connectToDatabase from "@/lib/mongoose";
+import { Pathway } from "@/lib/models";
 
 export async function POST(req: Request) {
   try {
     const session = await auth();
-    if (!session?.user?.id) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
 
-    const { title, description, goal } = await req.json();
+    const { title, goal } = await req.json();
 
-    if (!title) {
-      return new NextResponse("Title is required", { status: 400 });
-    }
+    await connectToDatabase();
 
-    const generateObjectId = () => {
-      const timestamp = Math.floor(Date.now() / 1000).toString(16);
-      const random = Array.from({length: 16}, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      return timestamp + random;
-    };
-    
-    const pathwayId = generateObjectId();
-    const date = new Date();
-
-    await prisma.$runCommandRaw({
-      insert: "Pathway",
-      documents: [{
-        _id: { $oid: pathwayId },
-        title,
-        description: description || "",
-        goal: goal || title,
-        userId: { $oid: session.user.id },
-        createdAt: { $date: date.toISOString() },
-        updatedAt: { $date: date.toISOString() }
-      }]
+    const newPathway = await Pathway.create({
+      title: title || "New Pathway",
+      goal: goal || "Learn something new",
+      userId: session.user.id,
     });
 
-    return NextResponse.json({ id: pathwayId });
+    return NextResponse.json({ id: newPathway._id, title: newPathway.title, goal: newPathway.goal });
   } catch (error) {
     console.error("Error creating pathway:", error);
     return new NextResponse("Internal Server Error", { status: 500 });
@@ -51,19 +32,17 @@ export async function GET(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const pathways = await prisma.pathway.findMany({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        goal: true,
-        userId: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    await connectToDatabase();
+
+    const pathways = await Pathway.find({ userId: session.user.id })
+      .sort({ createdAt: -1 })
+      .populate({
+        path: "modules",
+        populate: [
+          { path: "resources" },
+          { path: "quizzes" }
+        ]
+      });
 
     return NextResponse.json(pathways);
   } catch (error) {

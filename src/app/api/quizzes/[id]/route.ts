@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import connectToDatabase from "@/lib/mongoose";
+import { Quiz } from "@/lib/models";
 
 export async function PUT(
   req: Request,
@@ -13,24 +14,27 @@ export async function PUT(
 
     const { question, options, correctAnswer } = await req.json();
 
-    const quiz = await prisma.quiz.findUnique({
-      where: { id: resolvedParams.id },
-      include: { module: { include: { pathway: true } } },
+    await connectToDatabase();
+
+    const quiz = await Quiz.findById(resolvedParams.id).populate({
+      path: "moduleId",
+      populate: { path: "pathwayId" }
     });
 
-    if (!quiz || quiz.module.pathway.userId !== session.user.id) {
-      return new NextResponse("Not Found / Unauthorized", { status: 404 });
+    if (!quiz) {
+      return new NextResponse("Not Found", { status: 404 });
     }
 
-    await prisma.$runCommandRaw({
-      update: "Quiz",
-      updates: [
-        {
-          q: { _id: { $oid: resolvedParams.id } },
-          u: { $set: { question, options, correctAnswer } },
-        },
-      ],
-    });
+    const pathwayUserId = quiz.moduleId?.pathwayId?.userId;
+
+    if (!pathwayUserId || pathwayUserId.toString() !== session.user.id) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    quiz.question = question;
+    quiz.options = options;
+    quiz.correctAnswer = correctAnswer;
+    await quiz.save();
 
     return NextResponse.json({ id: resolvedParams.id, question, options, correctAnswer });
   } catch (error) {
@@ -47,24 +51,24 @@ export async function DELETE(
     const session = await auth();
     if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
 
-    const quiz = await prisma.quiz.findUnique({
-      where: { id: resolvedParams.id },
-      include: { module: { include: { pathway: true } } },
+    await connectToDatabase();
+
+    const quiz = await Quiz.findById(resolvedParams.id).populate({
+      path: "moduleId",
+      populate: { path: "pathwayId" }
     });
 
-    if (!quiz || quiz.module.pathway.userId !== session.user.id) {
-      return new NextResponse("Not Found / Unauthorized", { status: 404 });
+    if (!quiz) {
+      return new NextResponse("Not Found", { status: 404 });
     }
 
-    await prisma.$runCommandRaw({
-      delete: "Quiz",
-      deletes: [
-        {
-          q: { _id: { $oid: resolvedParams.id } },
-          limit: 1,
-        },
-      ],
-    });
+    const pathwayUserId = quiz.moduleId?.pathwayId?.userId;
+
+    if (!pathwayUserId || pathwayUserId.toString() !== session.user.id) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    await Quiz.findByIdAndDelete(resolvedParams.id);
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {
