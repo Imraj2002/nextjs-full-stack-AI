@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     await connectToDatabase();
 
     const mod = await Module.findById(moduleId).populate("pathwayId");
-    if (!mod || mod.pathwayId.userId.toString() !== session.user.id) {
+    if (!mod || (mod.pathwayId as any).userId.toString() !== session.user.id) {
       return new NextResponse("Module Not Found / Unauthorized", { status: 404 });
     }
 

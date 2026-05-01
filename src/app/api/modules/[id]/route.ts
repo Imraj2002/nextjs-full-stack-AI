@@ -23,7 +23,7 @@ export async function PUT(
     }
 
     // Safety check for unpopulated or missing pathway
-    const pathwayUserId = mod.pathwayId?.userId;
+    const pathwayUserId = (mod.pathwayId as any)?.userId;
     
     if (!pathwayUserId || pathwayUserId.toString() !== session.user.id) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -58,7 +58,7 @@ export async function DELETE(
       return new NextResponse("Not Found", { status: 404 });
     }
 
-    const pathwayUserId = mod.pathwayId?.userId;
+    const pathwayUserId = (mod.pathwayId as any)?.userId;
 
     if (!pathwayUserId || pathwayUserId.toString() !== session.user.id) {
       return new NextResponse("Unauthorized", { status: 401 });

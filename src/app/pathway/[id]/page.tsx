@@ -76,7 +76,7 @@ export default async function PathwayDetailPage({
         {/* Connection Line */}
         <div className="absolute left-6 top-8 bottom-8 w-[2px] bg-gradient-to-b from-blue-500/50 via-purple-500/50 to-transparent -z-10" />
 
-        {pathway.modules.map((module, idx) => (
+        {pathway.modules.map((module: any, idx: number) => (
           <div key={module.id} className="relative pl-16">
             {/* Module Dot */}
             <div className="absolute left-0 top-0 w-12 h-12 rounded-full glass border border-white/10 flex items-center justify-center z-10 group-hover:scale-110 transition-transform">
@@ -101,7 +101,7 @@ export default async function PathwayDetailPage({
                     Learning Resources
                   </h4>
                   <div className="space-y-3">
-                    {module.resources.map((res) => (
+                    {module.resources.map((res: any) => (
                       <a
                         key={res.id}
                         href={res.url}
@@ -130,7 +130,7 @@ export default async function PathwayDetailPage({
                     Knowledge Check
                   </h4>
                   <div className="space-y-4">
-                    {module.quizzes.map((quiz) => (
+                    {module.quizzes.map((quiz: any) => (
                       <div key={quiz.id} className="p-4 rounded-xl bg-white/5 border border-white/5">
                         <p className="text-sm font-medium text-white mb-3">{quiz.question}</p>
                         <div className="grid gap-2">

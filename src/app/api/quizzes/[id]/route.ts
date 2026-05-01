@@ -25,7 +25,7 @@ export async function PUT(
       return new NextResponse("Not Found", { status: 404 });
     }
 
-    const pathwayUserId = quiz.moduleId?.pathwayId?.userId;
+    const pathwayUserId = (quiz.moduleId as any)?.pathwayId?.userId;
 
     if (!pathwayUserId || pathwayUserId.toString() !== session.user.id) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -62,7 +62,7 @@ export async function DELETE(
       return new NextResponse("Not Found", { status: 404 });
     }
 
-    const pathwayUserId = quiz.moduleId?.pathwayId?.userId;
+    const pathwayUserId = (quiz.moduleId as any)?.pathwayId?.userId;
 
     if (!pathwayUserId || pathwayUserId.toString() !== session.user.id) {
       return new NextResponse("Unauthorized", { status: 401 });
