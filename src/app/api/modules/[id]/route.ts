@@ -12,7 +12,7 @@ export async function PUT(
     const session = await auth();
     if (!session?.user?.id) return new NextResponse("Unauthorized", { status: 401 });
 
-    const { title, content, order } = await req.json();
+    const updates = await req.json();
 
     await connectToDatabase();
 
@@ -29,12 +29,13 @@ export async function PUT(
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    mod.title = title;
-    mod.content = content;
-    mod.order = order;
+    if (updates.title !== undefined) mod.title = updates.title;
+    if (updates.content !== undefined) mod.content = updates.content;
+    if (updates.order !== undefined) mod.order = updates.order;
+    
     await mod.save();
 
-    return NextResponse.json({ id: resolvedParams.id, title, content, order });
+    return NextResponse.json({ id: resolvedParams.id, title: mod.title, content: mod.content, order: mod.order });
   } catch (error) {
     console.error("Error in PUT /api/modules/[id]:", error);
     return new NextResponse("Internal Server Error", { status: 500 });
