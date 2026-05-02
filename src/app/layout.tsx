@@ -30,10 +30,10 @@ export default function RootLayout({
                 Built with ❤️ for House of Edtech
               </p>
               <div className="mt-4 flex flex-col gap-2 text-xs text-slate-600">
-                <p>Developer: [Your Name]</p>
+                <p>Developer: [Raj Srivastava]</p>
                 <div className="flex justify-center gap-4">
-                  <a href="#" className="hover:text-slate-400 transition-colors">GitHub Profile</a>
-                  <a href="#" className="hover:text-slate-400 transition-colors">LinkedIn Profile</a>
+                  <a href="https://github.com/Imraj2002" className="hover:text-slate-400 transition-colors">GitHub Profile</a>
+                  <a href="https://www.linkedin.com/in/raj-srivastava-660b45228/" className="hover:text-slate-400 transition-colors">LinkedIn Profile</a>
                 </div>
               </div>
             </div>
