@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { Sparkles, Mail, Lock } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -15,6 +15,13 @@ function LoginForm() {
 
   const registered = searchParams.get("registered");
   const authError = searchParams.get("error");
+  // ✅ AUTO REDIRECT IF ALREADY LOGGED IN
+  useEffect(() => {
+    if (status === "authenticated") {
+      const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+      router.replace(callbackUrl); // ✅ use replace (not push)
+    }
+  }, [status, router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +39,8 @@ function LoginForm() {
     if (res?.error) {
       setError("Invalid email or password");
     } else {
-      router.push("/dashboard");
+      // router.refresh();
+      // router.push("/dashboard");
     }
   };
 
@@ -42,7 +50,7 @@ function LoginForm() {
         <div className="glass p-12 rounded-[40px] border-white/10 text-center relative overflow-hidden">
           {/* Decorative background */}
           <div className="absolute top-0 left-0 w-full h-full aura-gradient opacity-5 -z-10" />
-          
+
           <div className="p-4 aura-gradient rounded-3xl w-16 h-16 mx-auto mb-8 flex items-center justify-center shadow-2xl shadow-blue-500/20">
             <Sparkles className="w-8 h-8 text-white" />
           </div>
@@ -58,13 +66,13 @@ function LoginForm() {
                 Account created! Please sign in.
               </div>
             )}
-            
+
             {(error || authError) && (
               <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
                 {error || "Authentication failed"}
               </div>
             )}
-            
+
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-400 ml-1">Email</label>
               <div className="relative">
