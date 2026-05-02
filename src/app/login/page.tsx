@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense, useEffect } from "react";
+import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { Sparkles, Mail, Lock } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -15,13 +15,6 @@ function LoginForm() {
 
   const registered = searchParams.get("registered");
   const authError = searchParams.get("error");
-  // ✅ AUTO REDIRECT IF ALREADY LOGGED IN
-  useEffect(() => {
-    if (status === "authenticated") {
-      const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
-      router.replace(callbackUrl); // ✅ use replace (not push)
-    }
-  }, [status, router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,13 +27,13 @@ function LoginForm() {
       redirect: false,
     });
 
-    setLoading(false);
-
     if (res?.error) {
       setError("Invalid email or password");
+      setLoading(false);
     } else {
-      // router.refresh();
-      // router.push("/dashboard");
+      // Use window.location.href instead of router.push for production stability
+      // This forces a full reload and ensures the session cookie is correctly synced
+      window.location.href = "/dashboard";
     }
   };
 
