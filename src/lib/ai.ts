@@ -7,6 +7,9 @@ const openrouter = createOpenAI({
   apiKey: process.env.OPENROUTER_API_KEY!,
 });
 
+export const DEFAULT_AI_MODEL = process.env.AI_MODEL || "openrouter/auto";
+export const LEGACY_UNAVAILABLE_MODEL = "google/gemma-3-27b-it:free";
+
 const pathwaySchema = z.object({
   title: z.string(),
   description: z.string(),
@@ -44,7 +47,10 @@ export async function generateLearningPathway(
     ? createOpenAI({ baseURL: "https://openrouter.ai/api/v1", apiKey: customApiKey })
     : openrouter;
 
-  const selectedModel = customModel || process.env.AI_MODEL || "openrouter/free";
+  const selectedModel =
+    customModel && customModel !== LEGACY_UNAVAILABLE_MODEL
+      ? customModel
+      : DEFAULT_AI_MODEL;
 
   const { object } = await generateObject({
     model: provider(selectedModel),

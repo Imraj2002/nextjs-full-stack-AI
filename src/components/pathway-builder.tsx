@@ -3,6 +3,17 @@
 import { useState, useRef } from "react";
 import { Plus, Trash2, Save, BookOpen, Video, FileText, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
+import {
+  createModule,
+  createQuiz,
+  createResource,
+  deleteModule as deleteModuleAction,
+  deleteQuiz as deleteQuizAction,
+  deleteResource as deleteResourceAction,
+  updateModule as updateModuleAction,
+  updatePathway,
+  uploadFile,
+} from "@/app/actions";
 
 type Resource = { id: string; title: string; url: string; type: string; moduleId: string };
 type Quiz = { id: string; question: string; options: string; correctAnswer: string; moduleId: string };
@@ -18,21 +29,19 @@ export function PathwayBuilder({ initialPathway }: { initialPathway: Pathway }) 
 
   const savePathwayTitleDesc = async () => {
     setIsSaving(true);
-    await fetch(`/api/pathways/${pathway.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: pathway.title, description: pathway.description }),
+    await updatePathway(pathway.id, {
+      title: pathway.title,
+      description: pathway.description,
     });
     setIsSaving(false);
   };
 
   const addModule = async () => {
-    const res = await fetch("/api/modules", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pathwayId: pathway.id, title: "New Module", order: pathway.modules.length + 1 }),
+    const newMod = await createModule({
+      pathwayId: pathway.id,
+      title: "New Module",
+      order: pathway.modules.length + 1,
     });
-    const newMod = await res.json();
     setPathway({ ...pathway, modules: [...pathway.modules, { ...newMod, resources: [], quizzes: [] }] });
   };
 
@@ -41,25 +50,16 @@ export function PathwayBuilder({ initialPathway }: { initialPathway: Pathway }) 
       ...prev,
       modules: prev.modules.map(m => m.id === moduleId ? { ...m, ...updates } : m)
     }));
-    await fetch(`/api/modules/${moduleId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
+    await updateModuleAction(moduleId, updates);
   };
 
   const deleteModule = async (moduleId: string) => {
     setPathway(prev => ({ ...prev, modules: prev.modules.filter(m => m.id !== moduleId) }));
-    await fetch(`/api/modules/${moduleId}`, { method: "DELETE" });
+    await deleteModuleAction(moduleId);
   };
 
   const addResource = async (moduleId: string, type: string, url: string, title: string) => {
-    const res = await fetch("/api/resources", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ moduleId, title, url, type }),
-    });
-    const newRes = await res.json();
+    const newRes = await createResource({ moduleId, title, url, type });
     setPathway(prev => ({
       ...prev,
       modules: prev.modules.map(m => m.id === moduleId ? { ...m, resources: [...m.resources, newRes] } : m)
@@ -71,16 +71,16 @@ export function PathwayBuilder({ initialPathway }: { initialPathway: Pathway }) 
       ...prev,
       modules: prev.modules.map(m => m.id === moduleId ? { ...m, resources: m.resources.filter(r => r.id !== resourceId) } : m)
     }));
-    await fetch(`/api/resources/${resourceId}`, { method: "DELETE" });
+    await deleteResourceAction(resourceId);
   };
 
   const addQuiz = async (moduleId: string, question: string, options: string[], correctAnswer: string) => {
-    const res = await fetch("/api/quizzes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ moduleId, question, options: JSON.stringify(options), correctAnswer }),
+    const newQuiz = await createQuiz({
+      moduleId,
+      question,
+      options: JSON.stringify(options),
+      correctAnswer,
     });
-    const newQuiz = await res.json();
     setPathway(prev => ({
       ...prev,
       modules: prev.modules.map(m => m.id === moduleId ? { ...m, quizzes: [...m.quizzes, newQuiz] } : m)
@@ -92,7 +92,7 @@ export function PathwayBuilder({ initialPathway }: { initialPathway: Pathway }) 
       ...prev,
       modules: prev.modules.map(m => m.id === moduleId ? { ...m, quizzes: m.quizzes.filter(q => q.id !== quizId) } : m)
     }));
-    await fetch(`/api/quizzes/${quizId}`, { method: "DELETE" });
+    await deleteQuizAction(quizId);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,12 +103,7 @@ export function PathwayBuilder({ initialPathway }: { initialPathway: Pathway }) 
     formData.append("file", file);
 
     try {
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-      if (!res.ok) throw new Error("Upload failed");
-      const { url } = await res.json();
+      const { url } = await uploadFile(formData);
       
       await addResource(uploadingModuleId, "FILE", url, file.name);
     } catch (err) {

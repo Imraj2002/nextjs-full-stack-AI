@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Mail, Lock, User } from "lucide-react";
 import Link from "next/link";
+import { signup } from "@/app/actions";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -17,19 +18,7 @@ export default function SignupPage() {
     setError("");
 
     try {
-      const res = await fetch("/api/v1/auth/signup", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Something went wrong");
-      }
-
+      await signup(formData);
       router.push("/login?registered=true");
     } catch (err: any) {
       setError(err.message);

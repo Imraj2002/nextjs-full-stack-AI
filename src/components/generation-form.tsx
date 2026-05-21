@@ -3,6 +3,12 @@
 import { useState, useEffect } from "react";
 import { Sparkles, Loader2, Target, Settings2, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
+import {
+  createPathway,
+  generatePathway,
+  getUserPreferences,
+  saveUserPreferences,
+} from "@/app/actions";
 
 export function GenerationForm() {
   const [goal, setGoal] = useState("");
@@ -14,9 +20,7 @@ export function GenerationForm() {
   const router = useRouter();
 
   useEffect(() => {
-    // Fetch user preferences on mount
-    fetch("/api/v1/user/preferences")
-      .then((res) => res.json())
+    getUserPreferences()
       .then((data) => {
         if (data.maskedKey) setApiKey(data.maskedKey);
         if (data.aiModel) setModel(data.aiModel);
@@ -27,11 +31,7 @@ export function GenerationForm() {
   const handleSavePreferences = async () => {
     setIsSavingPref(true);
     try {
-      await fetch("/api/v1/user/preferences", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ aiApiKey: apiKey, aiModel: model }),
-      });
+      await saveUserPreferences({ aiApiKey: apiKey, aiModel: model });
       alert("Preferences saved successfully!");
     } catch (error) {
       console.error(error);
@@ -47,20 +47,16 @@ export function GenerationForm() {
 
     setIsLoading(true);
     try {
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal }),
-      });
-
-      if (!response.ok) throw new Error("Failed to generate");
-
-      const data = await response.json();
+      const data = await generatePathway(goal);
       router.push(`/pathway/${data.id}`);
       router.refresh();
     } catch (error) {
       console.error(error);
-      alert("Something went wrong. Please check your API keys and try again.");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please check your API key and model.";
+      alert(message);
     } finally {
       setIsLoading(false);
     }
@@ -169,13 +165,7 @@ export function GenerationForm() {
                 }
                 setIsLoading(true);
                 try {
-                  const res = await fetch("/api/pathways", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ title: goal, goal: goal })
-                  });
-                  if (!res.ok) throw new Error("Failed");
-                  const data = await res.json();
+                  const data = await createPathway({ title: goal, goal });
                   router.push(`/pathway/${data.id}?edit=true`);
                 } catch (e) {
                   alert("Failed to create pathway");

@@ -2,9 +2,16 @@
 
 import { GenerationForm } from "@/components/generation-form";
 import Link from "next/link";
-import { ChevronRight, Calendar, BookOpen, Trash2, Loader2 } from "lucide-react";
+import {
+  ChevronRight,
+  Calendar,
+  BookOpen,
+  Trash2,
+  Loader2,
+} from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useState, useEffect } from "react";
+import { deletePathway, getPathways } from "@/app/actions";
 
 interface Pathway {
   id: string;
@@ -19,12 +26,12 @@ export default function DashboardPageWrapper() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/pathways")
-      .then((res) => res.json())
+    getPathways()
       .then((data) => {
         setPathways(data);
         setLoading(false);
-      });
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   return (
@@ -42,15 +49,21 @@ export default function DashboardPageWrapper() {
           ) : pathways.length === 0 ? (
             <div className="glass p-12 rounded-3xl border-white/10 text-center">
               <BookOpen className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-              <p className="text-slate-400">You haven&apos;t created any pathways yet.</p>
+              <p className="text-slate-400">
+                You haven&apos;t created any pathways yet.
+              </p>
             </div>
           ) : (
             <div className="grid gap-6">
               {pathways.map((pathway) => (
-                <PathwayCard 
-                  key={pathway.id} 
-                  pathway={pathway} 
-                  onDelete={() => setPathways(prev => prev.filter(p => p.id !== pathway.id))} 
+                <PathwayCard
+                  key={pathway.id}
+                  pathway={pathway}
+                  onDelete={() =>
+                    setPathways((prev) =>
+                      prev.filter((p) => p.id !== pathway.id),
+                    )
+                  }
                 />
               ))}
             </div>
@@ -61,7 +74,13 @@ export default function DashboardPageWrapper() {
   );
 }
 
-function PathwayCard({ pathway, onDelete }: { pathway: Pathway, onDelete: () => void }) {
+function PathwayCard({
+  pathway,
+  onDelete,
+}: {
+  pathway: Pathway;
+  onDelete: () => void;
+}) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async (e: React.MouseEvent) => {
@@ -71,8 +90,8 @@ function PathwayCard({ pathway, onDelete }: { pathway: Pathway, onDelete: () => 
 
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/pathways/${pathway.id}`, { method: "DELETE" });
-      if (res.ok) onDelete();
+      await deletePathway(pathway.id);
+      onDelete();
     } catch (err) {
       console.error(err);
     } finally {
@@ -99,7 +118,9 @@ function PathwayCard({ pathway, onDelete }: { pathway: Pathway, onDelete: () => 
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium bg-white/5 px-2.5 py-1 rounded-full">
             <Calendar className="w-3 h-3" />
-            {formatDistanceToNow(new Date(pathway.createdAt), { addSuffix: true })}
+            {formatDistanceToNow(new Date(pathway.createdAt), {
+              addSuffix: true,
+            })}
           </div>
         </div>
       </div>
@@ -109,7 +130,11 @@ function PathwayCard({ pathway, onDelete }: { pathway: Pathway, onDelete: () => 
           disabled={isDeleting}
           className="p-2 rounded-xl bg-white/5 text-slate-600 hover:text-red-500 hover:bg-red-500/10 transition-all sm:opacity-0 sm:group-hover:opacity-100"
         >
-          {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+          {isDeleting ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <Trash2 className="w-5 h-5" />
+          )}
         </button>
         <ChevronRight className="w-6 h-6 text-slate-600 group-hover:text-blue-400 transition-all group-hover:translate-x-1" />
       </div>
