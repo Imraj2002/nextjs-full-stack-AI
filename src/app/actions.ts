@@ -18,6 +18,10 @@ type SignupInput = {
   password: string;
 };
 
+type ActionResult<T = undefined> =
+  | ({ ok: true } & (T extends undefined ? object : T))
+  | { ok: false; error: string };
+
 type PathwayInput = {
   title?: string;
   goal?: string;
@@ -79,32 +83,39 @@ function revalidateLearningPaths(pathwayId?: string) {
   }
 }
 
-export async function signup(input: SignupInput) {
-  const { name, email, password } = input;
+export async function signup(input: SignupInput): Promise<ActionResult> {
+  try {
+    const name = input.name.trim();
+    const email = input.email.trim().toLowerCase();
+    const { password } = input;
 
-  if (!name || !email || !password) {
-    throw new Error("Missing required fields");
+    if (!name || !email || !password) {
+      return { ok: false, error: "Please fill in all fields." };
+    }
+
+    if (password.length < 8) {
+      return { ok: false, error: "Password must be at least 8 characters." };
+    }
+
+    await connectToDatabase();
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return { ok: false, error: "This email is already registered. Please sign in instead." };
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await User.create({
+      name,
+      email,
+      password: hashedPassword,
+    });
+
+    return { ok: true };
+  } catch (error) {
+    console.error("Signup failed:", error);
+    return { ok: false, error: "Could not create your account. Please try again." };
   }
-
-  await connectToDatabase();
-
-  const existingUser = await User.findOne({ email });
-  if (existingUser) {
-    throw new Error("User with this email already exists");
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const newUser = await User.create({
-    name,
-    email,
-    password: hashedPassword,
-  });
-
-  return serialize({
-    id: newUser._id,
-    name: newUser.name,
-    email: newUser.email,
-  });
 }
 
 export async function getUserPreferences() {
@@ -153,67 +164,78 @@ export async function saveUserPreferences(input: UserPreferencesInput) {
   return { success: true };
 }
 
-export async function generatePathway(goal: string) {
-  const userId = await requireUserId();
-
-  if (!goal || typeof goal !== "string") {
-    throw new Error("Invalid goal");
-  }
-
-  await connectToDatabase();
-
-  const user = await User.findById(userId);
-  let generatedData;
+export async function generatePathway(goal: string): Promise<ActionResult<{ id: string }>> {
   try {
-    generatedData = await generateLearningPathway(goal, user?.aiApiKey, user?.aiModel);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown AI error";
-    throw new Error(
-      `AI generation failed. Check your OpenRouter API key/model in Advanced Settings. Details: ${message}`
-    );
-  }
+    const userId = await requireUserId();
 
-  const pathway = await Pathway.create({
-    title: generatedData.title,
-    description: generatedData.description,
-    goal,
-    userId,
-  });
+    if (!goal || typeof goal !== "string") {
+      return { ok: false, error: "Please enter a learning goal first." };
+    }
 
-  for (const mod of generatedData.modules) {
-    const createdModule = await Module.create({
-      pathwayId: pathway._id,
-      title: mod.title,
-      content: mod.content,
-      order: mod.order,
+    await connectToDatabase();
+
+    const user = await User.findById(userId);
+    let generatedData;
+
+    try {
+      generatedData = await generateLearningPathway(goal, user?.aiApiKey, user?.aiModel);
+    } catch (error) {
+      console.error("AI generation failed:", error);
+      return {
+        ok: false,
+        error:
+          "AI generation is unavailable right now. Your free model may be out of quota for today, or the selected model may be unavailable. Please try again later or choose another model in Advanced Settings.",
+      };
+    }
+
+    const pathway = await Pathway.create({
+      title: generatedData.title,
+      description: generatedData.description,
+      goal,
+      userId,
     });
 
-    if (mod.resources?.length > 0) {
-      await Resource.insertMany(
-        mod.resources.map((res: any) => ({
-          moduleId: createdModule._id,
-          title: res.title,
-          url: res.url,
-          type: res.type,
-        }))
-      );
+    for (const mod of generatedData.modules) {
+      const createdModule = await Module.create({
+        pathwayId: pathway._id,
+        title: mod.title,
+        content: mod.content,
+        order: mod.order,
+      });
+
+      if (mod.resources?.length > 0) {
+        await Resource.insertMany(
+          mod.resources.map((res: any) => ({
+            moduleId: createdModule._id,
+            title: res.title,
+            url: res.url,
+            type: res.type,
+          }))
+        );
+      }
+
+      if (mod.quizzes?.length > 0) {
+        await Quiz.insertMany(
+          mod.quizzes.map((quiz: any) => ({
+            moduleId: createdModule._id,
+            question: quiz.question,
+            options: JSON.stringify(quiz.options),
+            correctAnswer: quiz.correctAnswer,
+          }))
+        );
+      }
     }
 
-    if (mod.quizzes?.length > 0) {
-      await Quiz.insertMany(
-        mod.quizzes.map((quiz: any) => ({
-          moduleId: createdModule._id,
-          question: quiz.question,
-          options: JSON.stringify(quiz.options),
-          correctAnswer: quiz.correctAnswer,
-        }))
-      );
-    }
+    revalidateLearningPaths(pathway._id.toString());
+
+    return { ok: true, id: pathway._id.toString() };
+  } catch (error) {
+    console.error("Pathway generation failed:", error);
+    return {
+      ok: false,
+      error: "Could not generate the pathway. Please try again.",
+    };
   }
-
-  revalidateLearningPaths(pathway._id.toString());
-
-  return serialize({ id: pathway._id });
 }
 
 export async function getPathways() {

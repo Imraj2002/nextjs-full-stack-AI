@@ -47,16 +47,17 @@ export function GenerationForm() {
 
     setIsLoading(true);
     try {
-      const data = await generatePathway(goal);
-      router.push(`/pathway/${data.id}`);
+      const result = await generatePathway(goal);
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+
+      router.push(`/pathway/${result.id}`);
       router.refresh();
     } catch (error) {
       console.error(error);
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Something went wrong. Please check your API key and model.";
-      alert(message);
+      alert("Could not generate the pathway. Please try again.");
     } finally {
       setIsLoading(false);
     }

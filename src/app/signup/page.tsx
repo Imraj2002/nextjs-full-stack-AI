@@ -18,10 +18,16 @@ export default function SignupPage() {
     setError("");
 
     try {
-      await signup(formData);
+      const result = await signup(formData);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
       router.push("/login?registered=true");
     } catch (err: any) {
-      setError(err.message);
+      console.error(err);
+      setError("Could not create your account. Please try again.");
     } finally {
       setLoading(false);
     }
