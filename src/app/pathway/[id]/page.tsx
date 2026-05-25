@@ -1,48 +1,42 @@
 import { auth } from "@/lib/auth";
+import connectToDatabase from "@/lib/mongoose";
+import { Pathway } from "@/lib/models";
 import { redirect, notFound } from "next/navigation";
 import { BookOpen, CheckCircle2, PlayCircle, ExternalLink, HelpCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { getPathwayForUser } from "@/lib/data";
-import { Suspense } from "react";
 
 import { PathwayBuilder } from "@/components/pathway-builder";
 
-type PathwayDetailPageProps = { 
-  params: Promise<{ id: string }>,
-  searchParams: Promise<{ edit?: string }>
-};
-
-export default function PathwayDetailPage(props: PathwayDetailPageProps) {
-  return (
-    <Suspense
-      fallback={
-        <div className="max-w-5xl mx-auto px-4 py-12 text-slate-400">
-          Loading pathway...
-        </div>
-      }
-    >
-      <PathwayDetailContent {...props} />
-    </Suspense>
-  );
-}
-
-async function PathwayDetailContent({ 
+export default async function PathwayDetailPage({ 
   params,
   searchParams 
-}: PathwayDetailPageProps) {
+}: { 
+  params: Promise<{ id: string }>,
+  searchParams: Promise<{ edit?: string }>
+}) {
   const resolvedParams = await params;
   const resolvedSearchParams = await searchParams;
   
   const session = await auth();
   if (!session) redirect("/login");
-  const userId = session.user?.id;
-  if (!userId) redirect("/login");
 
-  const pathway = await getPathwayForUser(userId, resolvedParams.id);
+  await connectToDatabase();
 
-  if (!pathway) notFound();
+  const pathwayDoc = await Pathway.findOne({ _id: resolvedParams.id, userId: session.user?.id })
+    .populate({
+      path: "modules",
+      populate: [
+        { path: "resources" },
+        { path: "quizzes" }
+      ]
+    });
 
-  const isOwner = pathway.userId?.toString() === userId;
+  if (!pathwayDoc) notFound();
+
+  // Convert Mongoose document to plain POJO for Next.js Client Component serialization
+  const pathway = JSON.parse(JSON.stringify(pathwayDoc));
+
+  const isOwner = pathwayDoc.userId.toString() === session.user.id;
   const isEditing = resolvedSearchParams.edit === "true" && isOwner;
 
   return (

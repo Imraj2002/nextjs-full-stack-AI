@@ -1,7 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import {
@@ -9,7 +9,6 @@ import {
   LEGACY_UNAVAILABLE_MODEL,
   generateLearningPathway,
 } from "@/lib/ai";
-import { pathwayTag, pathwaysTag } from "@/lib/data";
 import connectToDatabase from "@/lib/mongoose";
 import { Module, Pathway, Quiz, Resource, User } from "@/lib/models";
 
@@ -75,12 +74,9 @@ async function requireUserId() {
   return userId;
 }
 
-function revalidateLearningPaths(userId: string, pathwayId?: string) {
-  updateTag(pathwaysTag(userId));
-
+function revalidateLearningPaths(pathwayId?: string) {
   revalidatePath("/dashboard");
   if (pathwayId) {
-    updateTag(pathwayTag(userId, pathwayId));
     revalidatePath(`/pathway/${pathwayId}`);
   } else {
     revalidatePath("/pathway/[id]", "page");
@@ -230,7 +226,7 @@ export async function generatePathway(goal: string): Promise<ActionResult<{ id: 
       }
     }
 
-    revalidateLearningPaths(userId, pathway._id.toString());
+    revalidateLearningPaths(pathway._id.toString());
 
     return { ok: true, id: pathway._id.toString() };
   } catch (error) {
@@ -240,6 +236,21 @@ export async function generatePathway(goal: string): Promise<ActionResult<{ id: 
       error: "Could not generate the pathway. Please try again.",
     };
   }
+}
+
+export async function getPathways() {
+  const userId = await requireUserId();
+
+  await connectToDatabase();
+
+  const pathways = await Pathway.find({ userId })
+    .sort({ createdAt: -1 })
+    .populate({
+      path: "modules",
+      populate: [{ path: "resources" }, { path: "quizzes" }],
+    });
+
+  return serialize(pathways);
 }
 
 export async function createPathway(input: PathwayInput) {
@@ -254,7 +265,7 @@ export async function createPathway(input: PathwayInput) {
     userId,
   });
 
-  revalidateLearningPaths(userId, newPathway._id.toString());
+  revalidateLearningPaths(newPathway._id.toString());
 
   return serialize({
     id: newPathway._id,
@@ -281,7 +292,7 @@ export async function updatePathway(
     throw new Error("Pathway not found");
   }
 
-  revalidateLearningPaths(userId, pathwayId);
+  revalidateLearningPaths(pathwayId);
 
   return serialize({
     id: updated._id,
@@ -307,7 +318,7 @@ export async function deletePathway(pathwayId: string) {
   await Resource.deleteMany({ moduleId: { $in: moduleIds } });
   await Quiz.deleteMany({ moduleId: { $in: moduleIds } });
 
-  revalidateLearningPaths(userId, pathwayId);
+  revalidateLearningPaths(pathwayId);
 
   return { success: true };
 }
@@ -330,7 +341,7 @@ export async function createModule(input: ModuleInput) {
     order: order || 1,
   });
 
-  revalidateLearningPaths(userId, pathwayId);
+  revalidateLearningPaths(pathwayId);
 
   return serialize({
     id: newModule._id,
@@ -362,7 +373,7 @@ export async function updateModule(moduleId: string, updates: ModuleUpdates) {
   if (updates.order !== undefined) mod.order = updates.order;
 
   await mod.save();
-  revalidateLearningPaths(userId, pathway._id.toString());
+  revalidateLearningPaths(pathway._id.toString());
 
   return serialize({
     id: moduleId,
@@ -391,7 +402,7 @@ export async function deleteModule(moduleId: string) {
   await Resource.deleteMany({ moduleId });
   await Quiz.deleteMany({ moduleId });
 
-  revalidateLearningPaths(userId, pathway._id.toString());
+  revalidateLearningPaths(pathway._id.toString());
 
   return { success: true };
 }
@@ -415,7 +426,7 @@ export async function createResource(input: ResourceInput) {
     type: type || "ARTICLE",
   });
 
-  revalidateLearningPaths(userId, pathway._id.toString());
+  revalidateLearningPaths(pathway._id.toString());
 
   return serialize({
     id: newResource._id,
@@ -446,7 +457,7 @@ export async function deleteResource(resourceId: string) {
   }
 
   await Resource.findByIdAndDelete(resourceId);
-  revalidateLearningPaths(userId, pathway._id.toString());
+  revalidateLearningPaths(pathway._id.toString());
 
   return { success: true };
 }
@@ -470,7 +481,7 @@ export async function createQuiz(input: QuizInput) {
     correctAnswer: correctAnswer || "Option 1",
   });
 
-  revalidateLearningPaths(userId, pathway._id.toString());
+  revalidateLearningPaths(pathway._id.toString());
 
   return serialize({
     id: newQuiz._id,
@@ -501,7 +512,7 @@ export async function deleteQuiz(quizId: string) {
   }
 
   await Quiz.findByIdAndDelete(quizId);
-  revalidateLearningPaths(userId, pathway._id.toString());
+  revalidateLearningPaths(pathway._id.toString());
 
   return { success: true };
 }
